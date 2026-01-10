@@ -9,8 +9,9 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 console.log('Clerk Key:', PUBLISHABLE_KEY);
 
 if (!PUBLISHABLE_KEY) {
-  throw new Error('Add your Clerk Publishable Key to the .env file as VITE_CLERK_PUBLISHABLE_KEY');
+  console.warn("Clerk key missing, app running without auth");
 }
+
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
