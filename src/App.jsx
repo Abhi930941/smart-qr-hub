@@ -308,37 +308,6 @@ const decodeImageWithApi = async (file) => {
   return null;
 };
 
-const initCamera = async (videoRef, canvasRef) => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }
-    });
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-    }
-    return stream;
-  } catch (err) {
-    console.error('Camera error:', err);
-    throw new Error('Camera access denied or not available');
-  }
-};
-
-const scanFromCamera = async (videoRef, canvasRef) => {
-  if (!window.jsQR) {
-    await loadJsQR();
-  }
-  const video = videoRef.current;
-  const canvas = canvasRef.current;
-  if (!video || !canvas) return null;
-  const ctx = canvas.getContext('2d');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const code = window.jsQR(imageData.data, canvas.width, canvas.height);
-  return code ? code.data : null;
-};
-
 /* ---------- QR Data Parser ---------- */
 const decodeQRData = (decodedString) => {
   if (!decodedString) return null;
@@ -654,8 +623,6 @@ const SmartQRHub = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState('blue');
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraStream, setCameraStream] = useState(null);
   const [showStats, setShowStats] = useState(false);
 
   // QR Generation states
@@ -700,11 +667,7 @@ const SmartQRHub = () => {
   const [scanResult, setScanResult] = useState(null);
   const [scanFile, setScanFile] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [cameraScanning, setCameraScanning] = useState(false);
   const scanInputRef = useRef(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const cameraIntervalRef = useRef(null);
 
   // History & Analytics
   const [qrHistory, setQrHistory] = useState([]);
@@ -738,18 +701,6 @@ const SmartQRHub = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // Stop camera on unmount
-  useEffect(() => {
-    return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-      }
-      if (cameraIntervalRef.current) {
-        clearInterval(cameraIntervalRef.current);
-      }
-    };
-  }, [cameraStream]);
 
   // Stats calculations
   const totalQRs = qrHistory.length;
@@ -824,53 +775,6 @@ const SmartQRHub = () => {
     },
   };
   const currentTheme = themes[theme] || themes.blue;
-
-  /* ---------- Camera Functions ---------- */
-  const startCameraScan = useCallback(async () => {
-    try {
-      setIsScanning(true);
-      setCameraScanning(true);
-      const stream = await initCamera(videoRef, canvasRef);
-      setCameraStream(stream);
-      setCameraActive(true);
-
-      cameraIntervalRef.current = setInterval(async () => {
-        try {
-          const decoded = await scanFromCamera(videoRef, canvasRef);
-          if (decoded) {
-            clearInterval(cameraIntervalRef.current);
-            const parsed = decodeQRData(decoded);
-            setScanResult(parsed);
-            setCameraScanning(false);
-            setIsScanning(false);
-
-            stream.getTracks().forEach(track => track.stop());
-            setCameraActive(false);
-            setCameraStream(null);
-          }
-        } catch (err) {
-          console.error('Scan error:', err);
-        }
-      }, 500);
-    } catch (err) {
-      alert('Camera access denied or not available. Please use image upload instead.');
-      setIsScanning(false);
-      setCameraScanning(false);
-    }
-  }, []);
-
-  const stopCameraScan = useCallback(() => {
-    if (cameraIntervalRef.current) {
-      clearInterval(cameraIntervalRef.current);
-    }
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-      setCameraStream(null);
-    }
-    setCameraActive(false);
-    setCameraScanning(false);
-    setIsScanning(false);
-  }, [cameraStream]);
 
   /* ---------- Reset Function ---------- */
   const resetGenerateForm = useCallback(() => {
@@ -1517,16 +1421,7 @@ const SmartQRHub = () => {
                         <span className="relative z-10">Login</span>
                       </button>
                     </SignInButton>
-                    <SignUpButton>
-                      <button className={`relative px-4 py-2 rounded-xl font-medium transition-all duration-300 group overflow-hidden ${
-                        darkMode 
-                          ? `bg-gradient-to-r ${currentTheme.secondary} text-white shadow-2xl shadow-current/30` 
-                          : `bg-gradient-to-r ${currentTheme.secondary} text-white shadow-2xl`
-                      }`}>
-                        <div className={`absolute inset-0 bg-gradient-to-r ${currentTheme.primary} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
-                        <span className="relative z-10">Sign Up</span>
-                      </button>
-                    </SignUpButton>
+                    
                   </div>
                 </SignedOut>
 
@@ -1661,21 +1556,13 @@ const SmartQRHub = () => {
                   <SignInButton mode="modal">
                     <button className={`w-full mb-2 px-4 py-2 text-sm font-medium text-center rounded-lg transition-all duration-300 ${
                       darkMode 
-                        ? 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 hover:text-white border border-gray-700/50' 
-                        : 'bg-gray-100/50 text-gray-700 hover:bg-gray-200/50 hover:text-gray-900 border border-gray-300/50'
+                        ? `bg-gradient-to-r ${currentTheme.primary} text-white shadow-lg hover:shadow-xl` 
+                        : `bg-gradient-to-r ${currentTheme.primary} text-white shadow-lg hover:shadow-xl`
                     }`}>
                       Sign in
                     </button>
                   </SignInButton>
-                  <SignUpButton>
-                    <button className={`w-full px-4 py-2 text-sm font-medium text-center rounded-lg transition-all duration-300 ${
-                      darkMode 
-                        ? `bg-gradient-to-r ${currentTheme.primary} text-white shadow-lg hover:shadow-xl` 
-                        : `bg-gradient-to-r ${currentTheme.primary} text-white shadow-lg hover:shadow-xl`
-                    }`}>
-                      Get Started
-                    </button>
-                  </SignUpButton>
+                  
                 </SignedOut>
                 <SignedIn>
                   <div className="flex items-center space-x-3">
@@ -1752,11 +1639,7 @@ const SmartQRHub = () => {
                         Login
                       </button>
                     </SignInButton>
-                    <SignUpButton>
-                      <button className={`px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-semibold transition-all ${darkMode ? `bg-gradient-to-r ${currentTheme.primary} text-white shadow-xl shadow-current/30` : `bg-gradient-to-r ${currentTheme.primary} text-white shadow-xl`}`}>
-                        Sign Up Free
-                      </button>
-                    </SignUpButton>
+                    
                   </div>
                 </div>
               </SignedOut>
@@ -2473,65 +2356,30 @@ const SmartQRHub = () => {
             <Card3D className="mb-6 sm:mb-8">
               <div className="p-4 sm:p-6 md:p-8">
                 <div className="text-center">
-                  {!cameraActive ? (
-                    <div className="mb-6 sm:mb-8">
-                      <h3 className={`text-xl font-bold mb-4 sm:mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Choose Scanning Method</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                  <div className="mb-6 sm:mb-8">
+                    <h3 className={`text-xl font-bold mb-4 sm:mb-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Upload QR Code Image</h3>
+                    <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                      <div>
+                        <input type="file" ref={scanInputRef} onChange={handleScanUpload} accept="image/*" className="hidden" />
                         <button
-                          onClick={startCameraScan}
+                          onClick={() => scanInputRef.current?.click()}
                           disabled={isScanning}
-                          className={`group p-6 sm:p-8 rounded-2xl border-2 transition-all duration-300 ${darkMode ? 'border-blue-500/30 bg-blue-900/10 hover:bg-blue-900/20' : 'border-blue-500/20 bg-blue-50 hover:bg-blue-100'} ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          className={`w-full group p-6 sm:p-8 rounded-2xl border-2 transition-all duration-300 ${darkMode ? 'border-green-500/30 bg-green-900/10 hover:bg-green-900/20' : 'border-green-500/20 bg-green-50 hover:bg-green-100'} ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          <div className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 rounded-2xl ${currentTheme.gradient} flex items-center justify-center shadow-lg shadow-current/30`}>
-                            <Camera className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+                          <div className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-green-500/30`}>
+                            <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                           </div>
-                          <p className={`text-lg font-medium mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Use Camera</p>
-                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Real-time scanning with your device camera</p>
+                          <p className={`text-lg font-medium mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Upload Image</p>
+                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Upload QR code image from your device</p>
+                          {isScanning && (
+                            <div className="mt-4">
+                              <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+                            </div>
+                          )}
                         </button>
-
-                        <div>
-                          <input type="file" ref={scanInputRef} onChange={handleScanUpload} accept="image/*" className="hidden" />
-                          <button
-                            onClick={() => scanInputRef.current?.click()}
-                            disabled={isScanning}
-                            className={`w-full group p-6 sm:p-8 rounded-2xl border-2 transition-all duration-300 ${darkMode ? 'border-green-500/30 bg-green-900/10 hover:bg-green-900/20' : 'border-green-500/20 bg-green-50 hover:bg-green-100'} ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            <div className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-green-500/30`}>
-                              <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                            </div>
-                            <p className={`text-lg font-medium mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Upload Image</p>
-                            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Upload QR code image from your device</p>
-                          </button>
-                        </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="mb-6 sm:mb-8">
-                      <div className="relative w-full max-w-md mx-auto rounded-2xl overflow-hidden shadow-2xl">
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          className="w-full h-64 object-cover"
-                        />
-                        <div className="absolute inset-0 border-4 border-blue-500/50 animate-pulse rounded-2xl"></div>
-                        {cameraScanning && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                            <div className="text-center">
-                              <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                              <p className="text-white font-medium">Scanning for QR codes...</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={stopCameraScan}
-                        className="mt-4 sm:mt-6 px-6 sm:px-8 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-red-600 to-pink-600 text-white font-medium shadow-lg hover:shadow-xl transition-all"
-                      >
-                        Stop Camera
-                      </button>
-                    </div>
-                  )}
+                  </div>
 
                   {/* Scan Result */}
                   {scanResult && (
@@ -2823,7 +2671,6 @@ const SmartQRHub = () => {
                               setScanResult(null); 
                               setScanFile(null); 
                               if (scanInputRef.current) scanInputRef.current.value = ''; 
-                              if (cameraActive) stopCameraScan();
                             }}
                             className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-gray-600 to-gray-700 text-white hover:opacity-90 transition-opacity"
                           >
